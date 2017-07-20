@@ -6,7 +6,7 @@ Created on Tue Apr 18 11:42:03 2017
 """
 
 # TODO entete
-
+import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -14,12 +14,15 @@ from matplotlib import cm
 from pylab import *
 from matplotlib.ticker import LinearLocator, FormatStrFormatter
 #import datadotworld-py-master as world
-
+from openalea.core.world import World
 try:
     from timagetk.components import SpatialImage,imsave
 except ImportError:
   
     raise ImportError('Import Error')
+from timagetk.algorithms import GeometricalFeatures    
+#from vplants.tissue_analysis.property_spatial_image import PropertySpatialImage
+import pickle
 np_float = np.float
 np_zeros = np.zeros
 np_power=np.power
@@ -38,7 +41,7 @@ class SegmentationEvaluation(object):
     - image 1
     - image 2
     """
-    def __init__(self, img_1,img_1_L1, img_2):
+    def __init__(self, img_1,img_1_er, img_2):
         """
         Similarity constructor        
         
@@ -48,15 +51,20 @@ class SegmentationEvaluation(object):
 
         :param *SpatialImage* img_2: input ``SpatialImage gray level``        
         """
-
-        self.img_1,self.img_1_L1, self.img_2 =img_1,img_1_L1, img_2 
-        conds_img = (isinstance(img_1,SpatialImage) and isinstance(img_1_L1,SpatialImage) and
+        self.world = World()
+        self.img_1,self.img_1_er, self.img_2 =img_1,img_1_er, img_2
+        # self.img_1_maillage,self.img_1_er_maillage =PropertySpatialImage(img_1),PropertySpatialImage(img_1_er) 
+        # self.img_1_maillage.compute_image_property('volume')
+        
+        conds_img = (isinstance(img_1,SpatialImage) and isinstance(img_1_er,SpatialImage) and
                      isinstance(img_2,SpatialImage))
+
         if conds_img:
-            self.shape_1,self.shape_1_L1, self.shape_2 = img_1.get_shape(),img_1_L1.get_shape(), img_2.get_shape()
-            print self.shape_1,self.shape_1_L1, self.shape_2
-            if self.shape_1==self.shape_2 and self.shape_1==self.shape_1_L1:
-                self.arr_1,self.arr_1_L1, self.arr_2 = img_1.get_array().astype(np_float), img_1_L1.get_array().astype(np_float),img_2.get_array().astype(np_float)
+            self.shape_1,self.shape_1_er, self.shape_2 = img_1.get_shape(),img_1_er.get_shape(), img_2.get_shape()
+            print self.shape_1,self.shape_1_er, self.shape_2
+            if self.shape_1==self.shape_2 and self.shape_1==self.shape_1_er:
+                print ('rrrrrr')
+                self.arr_1,self.arr_1_er, self.arr_2 = img_1.get_array().astype(np_float), img_1_er.get_array().astype(np_float),img_2.get_array().astype(np_float)
                 self.vox_1,self.vox_2 = img_1.get_voxelsize(),img_2.get_voxelsize()
                 
                 if self.img_1.get_dim()==2:
@@ -65,25 +73,21 @@ class SegmentationEvaluation(object):
                 elif self.img_1.get_dim()==3:
                     self.len1D = self.shape_1[0]*self.shape_1[1]*self.shape_1[2]
                     
-                self.sig_1_1D,self.sig_1_L1_1D, self.sig_2_1D = np_reshape(self.arr_1,(self.len1D,1)),np_reshape(self.arr_1_L1,(self.len1D,1)),np_reshape(self.arr_2,(self.len1D,1))                 
-                self.iter1D = xrange(self.len1D)    
+                self.sig_1_1D,self.sig_1_er_1D, self.sig_2_1D = np_reshape(self.arr_1,(self.len1D,1)),np_reshape(self.arr_1_er,(self.len1D,1)),np_reshape(self.arr_2,(self.len1D,1))                 
+                self.iter1D = xrange(self.len1D)   
+                print np.unique(self.sig_1_1D)
                 self.nbre_cellules=len(np.unique(self.sig_1_1D))
-                self.nbre_cellules_L1=len(np.unique(self.sig_1_L1_1D))
+                self.nbre_cellules_er=len(np.unique(self.sig_1_er_1D))
                 self.etiq_max=int(np.max(self.sig_1_1D))
-                self.etiq_max_L1=int(self.sig_1_L1_1D.max())
-#                for i in self.sig_1_L1_1D :
-#                    if 
-                print ('voxel',self.vox_2)
-                volume_cell=self.vox_2[0]*self.vox_2[1]*self.vox_2[2]
-                print ('volume voxel',volume_cell)
-                print ('val max de l etiquette',self.etiq_max)
-                print ('nombre de cellules',self.nbre_cellules)
-                print ('val max de l etiquette L1',self.etiq_max_L1)
-                print ('nombre de cellules L1',self.nbre_cellules_L1)
-#                
+                
+                self.etiq_max_er=int(self.sig_1_er_1D.max())
+                self.labels=np.unique(self.sig_1_1D)
+
+                self.labels_er=np.unique(self.sig_1_er_1D)
+               
             else: 
                 print('TODO')               
-        
+    
 # calcul de la valeur moyenne de l'image en niveau de gris              
 
 
@@ -99,74 +103,148 @@ class SegmentationEvaluation(object):
         
 #### Calcul de volume intra cellule ####
         
-    def compute_intra_volume(self,label=None):
-       
-        nbre_pixel_par_cell=np.ones((self.etiq_max+1,1),dtype=np.float)
-        volume_cell=np_zeros((self.etiq_max+1,1),dtype=np.float)
-  
-        if label=='L1':
-            sig_1=self.sig_1_L1_1D
-            print ('l1')
-        elif label=='L2':
-            print ('l2')
-        elif label==None :
-            sig_1=self.sig_1_1D 
-        ## calcul de la moyenne de chaque cellule        
-        for i in self.iter1D:
-            ind_cell=int(sig_1[i])            
-            nbre_pixel_par_cell[ind_cell]+= 1
-        volume_cell=nbre_pixel_par_cell*self.vox_2[0]*self.vox_2[1]*self.vox_2[2]
-        print ('door')
-        return volume_cell
+    def compute_intra_volume(self,labels_interet=None,erosion=0):
+        if labels_interet==None:
+            labels_interet=self.labels[:]
+        
+        if erosion==0:
+            sig_1=self.sig_1_1D[:] 
+        else:
+            sig_1=self.sig_1_er_1D[:]
+        nbre_pixel_par_cell=np.ones(np.shape(labels_interet),dtype=np.float)
+        volume_par_cell=np_zeros(np.shape(labels_interet),dtype=np.float)
+
+        
+      
+        for ind,ind_cell in enumerate(labels_interet):
+            sig_2=self.sig_2_1D[np.where(sig_1==ind_cell)]
+            
+            nbre_pixel_par_cell[ind]=len(sig_2)
+        print ('nb',nbre_pixel_par_cell)
+        volume_par_cell=nbre_pixel_par_cell*self.vox_2[0]*self.vox_2[1]*self.vox_2[2]
+        print volume_par_cell
+        # df1 = pd.DataFrame()  
+        # df1['label'] = self.labels[1::]
+        # df1['volume'] = volume_cell[1::]        
+        # self.world.add(df1,'label_volume')
+        # 
+        # self.img_1_maillage.update_image_property('label_ilhem',self.labels)
+        # self.img_1_maillage.update_image_property('volume_ilhem',volume_cell)
+        # self.world.add(self.img_1_maillage,'property')
+        return labels_interet,volume_par_cell
  
+#### Calcul de volume intra cellule ####
+        
+    def compute_intra_volume_normalised(self,labels_interet=None,erosion=0):
+        
+        volume_par_cell=self.compute_intra_volume(labels_interet,erosion)
+        print volume_par_cell[0],volume_par_cell[1],len(volume_par_cell)
+        
+        volume_moyen=np.sum(volume_par_cell[1::])/len(volume_par_cell)
+        print volume_moyen
+        volume_par_cell_norm=volume_par_cell/volume_moyen
+        print volume_par_cell_norm[0],volume_par_cell[1],len(volume_par_cell)
+        # df1 = pd.DataFrame()  
+        # df1['label'] = self.labels[1::]
+        # df1['volume'] = volume_cell[1::]        
+        # self.world.add(df1,'label_volume')
+        # 
+        # self.img_1_maillage.update_image_property('label_ilhem',self.labels)
+        # self.img_1_maillage.update_image_property('volume_ilhem',volume_cell)
+        # self.world.add(self.img_1_maillage,'property')
+        return volume_par_cell_norm
+#### Calcul de la moyenne intra cellule ####
+        
+    def compute_intra_moyenne(self,labels_interet=None,erosion=0): 
+        if labels_interet==None:
+            labels_interet=self.labels
+        else:
+            labels_interet=np.array(labels_interet)
+
+        if erosion==0:
+            sig_1=self.sig_1_1D[:] 
+        else:
+            sig_1=self.sig_1_er_1D[:]
+        somme_par_cell=np_zeros(np.shape(labels_interet),dtype=np.float)
+        nbre_pixel_par_cell=np_zeros(np.shape(labels_interet),dtype=np.float)
+        moyenne_par_cell=np_zeros(np.shape(labels_interet),dtype=np.float)
+
+        for ind_cell in labels_interet:
+
+            sig_2=self.sig_2_1D[np.where(sig_1==ind_cell)]
+            somme_par_cell[np.where(labels_interet==ind_cell)]=np.sum(sig_2)
+            nbre_pixel_par_cell[np.where(labels_interet==ind_cell)]=len(sig_2)
+
+        print ('ttt',len(labels_interet))
+        labels_interet=labels_interet[np.where(nbre_pixel_par_cell!=0)]
+        print len(labels_interet)
+        somme_par_cell=somme_par_cell[np.where(nbre_pixel_par_cell!=0)] 
+        nbre_pixel_par_cell=nbre_pixel_par_cell[np.where(nbre_pixel_par_cell!=0)] 
+        moyenne_par_cell=somme_par_cell/nbre_pixel_par_cell
+       # print nbre_pixel_par_cell,somme_par_cell,moyenne_par_cell
+        return  labels_interet,nbre_pixel_par_cell,somme_par_cell,moyenne_par_cell
+    
  #### Calcul la variance intra cellule ####
         
-    def compute_intra_variance(self,label=None):
-        if label=='L1':
-            sig_1=self.sig_1_L1_1D
-            print ('l1')
-        elif label=='L2':
-            print ('l2')
-        elif label==None :
-            print('l1l2l3')
-            sig_1=self.sig_1_1D    
-        ## Calcul de la moyenne de chaque classe
-        somme_par_cell=np_zeros((self.etiq_max+1,1),dtype=np.float)
-        nbre_pixel_par_cell=np_zeros((self.etiq_max+1,1),dtype=np.float)
-        volume_cell=np_zeros((self.etiq_max+1,1),dtype=np.float)
-        moyenne_par_cell=np_zeros((self.etiq_max+1,1),dtype=np.float)
-        var_intra_par_cell=np_zeros((self.etiq_max+1,1),dtype=np.float)
-        print ('rrr')
-        ## calcul de la moyenne de chaque cellule        
-        for i in self.iter1D:
-            ind_cell=int(sig_1[i])            
-            somme_par_cell[ind_cell]=somme_par_cell[ind_cell]+self.sig_2_1D[i]
-            print ('rrr')
-            nbre_pixel_par_cell[ind_cell]+= 1
-       
-        for i,nb in enumerate(nbre_pixel_par_cell):
-            if (nb!=0):
-                moyenne_par_cell[i]=somme_par_cell[i]/float(nb)           
-              
-         # Calcul de la variance intra cellule
-
-        for i in self.iter1D:
-            ind_cell=int(sig_1[i])
-            var_intra_par_cell[ind_cell]+=np_power(self.sig_2_1D[i]-moyenne_par_cell[ind_cell],2)/float(nbre_pixel_par_cell[ind_cell])
+    def compute_intra_variance(self,labels_interet=None,erosion=0):
+        if labels_interet==None:
+            labels_interet=self.labels
+        else:
+            labels_interet=np.array(labels_interet)
+        if erosion==0:
+            sig_1=self.sig_1_1D[:] 
+        else:
+            sig_1=self.sig_1_er_1D[:]
         
-        #Calcul de volume de chaque cellule
-        volume_cell=nbre_pixel_par_cell*self.vox_2[0]*self.vox_2[1]*self.vox_2[2]
-        #Elimination des cellulules d'etiquette 0 et 1 (le fond)
-        print self.etiq_max+1
-        print ('vaaar',var_intra_par_cell)
-        for i in np.arange(self.etiq_max+1):
-            print ('label: ',i,'var: ',var_intra_par_cell[i])
-        var_intra_par_cell=var_intra_par_cell[2::]
+              
+        labels_interet,nbre_pixel_par_cell,somme_par_cell,moyenne_par_cell=self.compute_intra_moyenne(labels_interet,erosion)  
+        var_intra_par_cell=np_zeros(np.shape(moyenne_par_cell),dtype=np.float)
 
-        nbre_pixel_par_cell=nbre_pixel_par_cell[2::]
+        for ind_cell in labels_interet:
 
-        volume_cell=volume_cell[2::]
-        return var_intra_par_cell,volume_cell
+            sig_2=self.sig_2_1D[np.where(sig_1==ind_cell)]
+            moyenne=moyenne_par_cell[np.where(labels_interet==ind_cell)][0]
+            print moyenne
+            var_intra_par_cell[np.where(labels_interet==ind_cell)]=np.sum(np_power(sig_2-moyenne,2))
+        
+        moy=self.compute_val_moy()
+        
+        var_intra_par_cell/= nbre_pixel_par_cell
+        #var_intra_par_cell_norm=(var_intra_par_cell/moyenne_par_cell)*moy
+        print var_intra_par_cell
+        print np.shape(var_intra_par_cell)
+        # df = pd.DataFrame()
+        # df['label'] = self.labels[1::]
+        # df['volume'] = volume_cell[1::]
+        # df['variance'] = var_intra_par_cell[1::]
+        # 
+        # print ('len',len(self.labels),len(volume_cell),len(self.img_1_maillage.labels)) 
+        # self.world.add(df,'label_volume_variance')
+        # self.img_1_maillage.update_image_property('label_ilhem',self.labels)
+        # self.img_1_maillage.update_image_property('variance_ilhem',var_intra_par_cell)
+        # self.img_1_maillage.update_image_property('volume_ilhem',volume_cell)
+
+        # self.world.add(self.img_1_maillage,'property')
+        return var_intra_par_cell
+    
+#### Calcul de volume intra cellule ####
+        
+    def compute_intra_variance_normalised(self,labels_interet=None,erosion=0):
+        labels_interet,nbre_pixel_par_cell,somme_par_cell,moyenne_intra_cell=self.compute_intra_moyenne(labels_interet,erosion)
+        var_par_cell=self.compute_intra_variance(labels_interet,erosion)
+
+        var_par_cell_norm=var_par_cell/moyenne_intra_cell
+       
+        # df1 = pd.DataFrame()  
+        # df1['label'] = self.labels[1::]
+        # df1['volume'] = volume_cell[1::]        
+        # self.world.add(df1,'label_volume')
+        # 
+        # self.img_1_maillage.update_image_property('label_ilhem',self.labels)
+        # self.img_1_maillage.update_image_property('volume_ilhem',volume_cell)
+        # self.world.add(self.img_1_maillage,'property')
+        return labels_interet,var_par_cell_norm
+ 
     
 #### Calcul la variance intra cellule normalisee ####
         
@@ -187,7 +265,7 @@ class SegmentationEvaluation(object):
         var_intra_par_cell,volume_cell=self.compute_intra_variance()
 #        #seuil de mal segmentation
 #        seuil =500
-        etiq_cell_bad_seg=np.where((var_intra_par_cell>seuil-5)&(var_intra_par_cell<seuil+5))
+        etiq_cell_bad_seg=np.where(var_intra_par_cell>seuil)
         etiq_cell_bad_seg=etiq_cell_bad_seg[0]+2
         print ('etiquettes cellules mal segmentees',etiq_cell_bad_seg)
         cell_bad_seg=np.shape(etiq_cell_bad_seg)
@@ -195,7 +273,13 @@ class SegmentationEvaluation(object):
         nb_cell_bad_seg=cell_bad_seg[0]
         print nb_cell_bad_seg
         print ('nombre cellules mal segmentees',nb_cell_bad_seg)
-    
+        var=var_intra_par_cell[np.where(var_intra_par_cell>seuil)]
+        df = pd.DataFrame()
+        df['label'] = etiq_cell_bad_seg
+       
+        df['variance'] = var
+
+        self.world.add(df,'label_volume_variance')
         return nb_cell_bad_seg,etiq_cell_bad_seg 
         
 #### Calcul de nombre de cellules mal segmentees
@@ -214,7 +298,7 @@ class SegmentationEvaluation(object):
         volume_cell=self.compute_intra_volume()
 #        #seuil de mal segmentation
 #        seuil =10
-        etiq_cell_bad_seg=np.where(volume_cell>seuil)
+        etiq_cell_bad_seg=np.where(volume_cell<seuil)
         etiq_cell_bad_seg=etiq_cell_bad_seg[0]
         print ('etiquettes cellules mal segmentees',etiq_cell_bad_seg)
         cell_bad_seg=np.shape(etiq_cell_bad_seg)
@@ -311,7 +395,7 @@ class SegmentationEvaluation(object):
         return 
     
 ### plot intra variance en fct des tailles des cellules          
-    def plot_taille_variance(self,x_seg):
+    def plot_volume_variance(self,x_seg):
        
         var_intra_par_cell,volume_cell =self.compute_intra_variance()
         var_intra_par_cell_L1,volume_cell_L1 =self.compute_intra_variance('L1')
@@ -354,7 +438,7 @@ class SegmentationEvaluation(object):
         return 
 
 ### plot intra variance en fct des etiquettes des cellules         
-    def plot_volume_variance(self,x_seg):
+    def plot_label_variance(self,x_seg):
         
         var_intra_par_cell,volume_cell =self.compute_intra_variance()
         x=np.linspace(0,self.etiq_max+1,self.etiq_max+1,endpoint=True)
@@ -542,6 +626,8 @@ class SegmentationEvaluation(object):
         x='var'+str(seuil)+'_'+x
         imsave('/home/sophie/dev/data_2/seg_bad_variance/'+x,out_seg) 
         imsave('/home/sophie/dev/data_2/gray_bad_variance/'+x,out_gray)
+        world.add(out_gray,"image")
+        return
         
 #### Image des cellules bad volume
     def plot_cell_bad_volume(self,x,seuil):
@@ -559,12 +645,12 @@ class SegmentationEvaluation(object):
             sig_2[ind]=255
         
         out_seg = np_reshape(sig_1.astype(np_uint16),self.shape_1)
-        out_gray = np_reshape(sig_2.astype(np_uint8),self.shape_1)
+        out_gray = np_reshape(sig_2.astype(np_uint16),self.shape_1)
         out_seg = SpatialImage(out_seg,voxelsize=self.vox_1)
         out_gray = SpatialImage(out_gray,voxelsize=self.vox_2)
-        x='vol'+str(seuil)+'_'+x
-        imsave('/home/sophie/dev/data_2/seg_bad_volume/'+x,out_seg) 
-        imsave('/home/sophie/dev/data_2/gray_bad_volume/'+x,out_gray)        
+        x='volume_'+str(seuil)+'_'+x
+        imsave('/home/sophie/dev/data_1/seg_bad_volume/'+x,out_seg) 
+        imsave('/home/sophie/dev/data_1/gray_bad_volume/'+x,out_gray)        
        
         return
         
@@ -590,7 +676,7 @@ class SegmentationEvaluation(object):
         x='var'+str(seuil_var)+'_vol'+str(seuil_vol)+'_'+x
         imsave('/home/sophie/dev/data_2/seg_bad_variance_volume/'+x,out_seg) 
         imsave('/home/sophie/dev/data_2/gray_bad_variance_volume/'+x,out_gray)
-
+        return
         
     def normalise_value(self,val, input_range,output_range=None):
         """
@@ -609,101 +695,135 @@ class SegmentationEvaluation(object):
             print('gh')
         return          
 #### Image des cellules bad volume
-    def plot_defaut_image(self,x):
-        
-#        labels = np.unique(self.arr_1).tolist() # labels
-#        background_id = np.min(labels)
+    def plot_defaut_image(self):
+
         background_id=1
-        print background_id
-        output_arr=self.arr_1
-        print np.where(self.arr_1==255)
-#        output_arr=self.arr_2
-#        output_arr[np.where(self.arr_1==background_id)]=1
-#
-#        #output_arr[np.where(output_arr!=1)]=255
-        output_arr[np.where(self.arr_1!=background_id)]=self.arr_2[np.where(self.arr_1!=background_id)]
-       
-      
-        #output_arr[np.where(output_arr==background_id)]=255
-        #output_arr[np.where(output_arr==1)]=128
+
+        output_arr=self.arr_1_er
+
+        output_arr[np.where(self.arr_1_er!=background_id)]=self.arr_2[np.where(self.arr_1_er!=background_id)]
+
         print np.where(output_arr==background_id)
-        output_arr= np.reshape(output_arr.astype(np.uint8),np.shape(output_arr))
+        output_arr= np.reshape(output_arr.astype(np.uint16),np.shape(output_arr))
         output_arr = SpatialImage(output_arr,voxelsize=self.vox_1)
 
-       
-        x='defaut_'+x
-        #imsave('/home/sophie/dev/data_1/defaut_image/'+x,output_arr) 
-        
-       
-        return  x 
 
-        #### Image des cellules bad volume
-    def compute_taux_variance_erosion(self,obj,obj_er,x):
-        
-        var_intra_par_cell,volume_cell=obj.compute_intra_variance()
-        var_intra_par_cell_er,volume_cell_er=obj_er.compute_intra_variance()
-        taux_erosion= np_zeros(np.shape(var_intra_par_cell_er),dtype=np.float)      
-        taux_erosion[np.where(var_intra_par_cell_er!=0)]=var_intra_par_cell_er[np.where(var_intra_par_cell_er!=0)]/var_intra_par_cell[np.where(var_intra_par_cell_er!=0)] 
+        # x='defaut_'+x
+        # imsave('/home/sophie/dev/data_1/defaut_image/'+x,output_arr) 
                
-        print taux_erosion
-        seuil=np.max(taux_erosion)
-        seuil=0.8
-        etiq=np.where(taux_erosion>seuil)[0]+2
-        print taux_erosion[etiq-2]
-        print ('nombre etiquette mal',len(etiq))
-        print etiq
-        output_arr=obj.arr_2
-        output_arr[np.where(output_arr==255)]=1
-        for val in etiq:
-            output_arr[np.where(obj_er.arr_1==val)]=255
-        
-        output_arr= np.reshape(output_arr.astype(np.uint8),np.shape(output_arr))
-        output_arr = SpatialImage(output_arr,voxelsize=obj.vox_1)
-       
-        x='taux_grad_hess_'+str(seuil)+'_'+x
-        imsave('/home/sophie/dev/data_1/taux_erosion/'+x,output_arr) 
-       # world.add(image,output_arr)
-             
-        return 
+        return  output_arr 
 
 #### Image des cellules d interet
     def plot_cell_interet(self,x,labels_interet):
-        #var_intra_par_cell,nbre_pixel_par_cell,volume_cell=obj.compute_intra_variance()
-        # nb_cell_bad_seg,etiq_cell_bad_seg =self.compute_number_etiq_cell_bad_volume(seuil)
-        # print etiq_cell_bad_seg
-        # print np.shape(etiq_cell_bad_seg)
-        
-        #labels_interet=np.unique(self.sig_1_1D)
-       
-        sig_1=self.sig_1_1D
+
+   
+        print self.sig_1_1D
+        sig_1=255*np.ones((self.len1D,1),dtype=np.int16)
+
+        sig_1[np.where(self.sig_1_1D==1)]=1
         sig_2=self.sig_2_1D
         for val in labels_interet:
 
-            ind=np.where(sig_1==val)
+            ind=np.where(self.sig_1_1D==val)
             val=int(val)
            
-        #print ('label: ', val,' variance: ',var_intra_par_cell[val-2] ,'volume: ',volume_cell[val-2] )
             sig_1[ind]=val
        
             sig_2[ind]=val
-        ########ou
-      #  sig_1=np_zeros((self.len1D,1),dtype=np.int64)
-      #  sig_2=self.sig_2_1D
-      #  sig_1[np.where(self.sig_1_1D)==1]=self.sig_1_1D[np.where(self.sig_1_1D)==1]
-      #  sig_1[np.where(self.sig_1_1D)!=1]=255
-      #  for val in labels_interet:
-      #       ind=np.where(self.sig_1_1D==val)
-      #       val=int(val)
-      #       #print ('label: ', val,' variance: ',var_intra_par_cell[val-2] ,'volume: ',volume_cell[val-2] )
-      #       sig_1[ind]=val
-      # 
-      #       sig_2[ind]=val
+
         out_seg = np_reshape(sig_1.astype(np_uint16),self.shape_1)
         out_gray = np_reshape(sig_2.astype(np_uint16),self.shape_1)
         out_seg = SpatialImage(out_seg,voxelsize=self.vox_1)
         out_gray = SpatialImage(out_gray,voxelsize=self.vox_2)
-        x='cell_expert_'+x
+        x='cell_ex_'+x
         imsave('/home/sophie/dev/data_1/seg_cellule_interet/'+x,out_seg) 
         imsave('/home/sophie/dev/data_1/gray_cellule_interet/'+x,out_gray)  
-        world.add(out_gray,"image")
-        return     
+        #self.world.add(out_gray,"image_gray")
+        self.world.add(out_seg,"image_seg")
+        return  out_seg    
+    
+
+
+
+#### Choix d'un voisinage
+    def compute_voisinage(self, dict,label_x):
+        background_id=1 
+        voisinage=dict[label_x]['Neighbors']
+        if background_id in voisinage:
+                voisinage.remove(background_id)
+        return voisinage
+    
+    def compute_choix_voisinage(self,dict,labels_x):
+        labels_y=np_zeros(np.shape(labels_x),dtype=np.int16)
+        
+        for ind,key in enumerate(labels_x):
+            voisinage=self.compute_voisinage(dict,key)
+            
+                
+            
+            choix=choice(voisinage)
+            while ((choix in labels_y) or (choix in labels_x)):
+                print('2 labels de meme voisinage')
+                choix=choice(voisinage)
+            labels_y[ind]=choix
+
+        return labels_y
+
+#### Fusion d'une liste de paires de cellules
+    def compute_fusion_liste(self,img_seg,labels_x,labels_y):
+        for label_x,label_y in zip(labels_x,labels_y):
+            self.compute_fusion_paire(img_seg,label_x,label_y)
+        return img_seg
+
+#### Fusion d'une paire de cellules
+    def compute_fusion_paire(self,img_seg,label_x,label_y):
+        img_seg[np.where(img_seg==label_y)]=label_x
+        return img_seg
+    
+ #### Calcul de l histogramme####
+        
+    def compute_hist(self,label_interet=None,erosion=0):
+        
+        if erosion==0:
+            sig_1=self.sig_1_1D
+        else:
+            sig_1=self.sig_1_er_1D
+        nbits = 8*self.img_2.itemsize
+        min_val, max_val = 0, pow(2,nbits)-1
+        nbins = (max_val - min_val) + 1
+        
+        sig_label=self.sig_2_1D[np.where(sig_1==label_interet)]
+
+        hist_label, bin_edges_1 = np_histogram(sig_label,bins=nbins)
+        
+        return hist_label
+        
+
+#### compute entropie intra cellule
+    def compute_intra_entropie(self,labels_interet=None,erosion=0):
+        if labels_interet==None:
+            labels_interet=self.labels
+        else:
+            labels_interet=np.array(labels_interet)
+        if erosion==0:
+            sig_1=self.sig_1_1D[:] 
+        else:
+            sig_1=self.sig_1_er_1D[:]
+
+        
+        labels_interet,nbre_pixel_par_cell,somme_par_cell,moyenne_par_cell= self.compute_intra_moyenne(labels_interet,erosion)
+        prob_label=np.zeros(np.shape(moyenne_par_cell),dtype=np.float)
+        entropie_labels=np.zeros(np.shape(moyenne_par_cell),dtype=np.float)
+        for ind,label_interet in enumerate(labels_interet):
+            hist_label=self.compute_hist(label_interet,erosion)
+            prob_label=hist_label/float(nbre_pixel_par_cell[ind])
+         
+            for val_1 in prob_label :        
+                if val_1!=0 :        
+                    entropie_labels[ind]=entropie_labels[ind]-val_1*np.log2(val_1)
+                
+
+        return entropie_labels
+    
+
+
